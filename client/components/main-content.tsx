@@ -1,8 +1,6 @@
 "use client"
 
-import type React from "react"
-
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -10,32 +8,47 @@ import { Input } from "@/components/ui/input"
 import { Upload, FileText, MessageSquare, Loader2, Send } from "lucide-react"
 import type { Note } from "@/types/note"
 
+
 interface MainContentProps {
   activeNote: Note | null
   onAddNote: (note: Note) => void
-  onSetActiveNote: (note: Note | null) => void   // ← add this line
+  onSetActiveNote: (note: Note | null) => void
+  onSetNotes: (notes: Note[]) => void
 }
 
-
-
-export function MainContent({ activeNote,onSetActiveNote, onAddNote }: MainContentProps) {
+export function MainContent({ activeNote, onAddNote, onSetActiveNote, onSetNotes }: MainContentProps) {
   const [isUploading, setIsUploading] = useState(false)
   const [isSummarizing, setIsSummarizing] = useState(false)
   const [isAnswering, setIsAnswering] = useState(false)
+  const [isProcessingText, setIsProcessingText] = useState(false)
   const [question, setQuestion] = useState("")
   const [currentSummary, setCurrentSummary] = useState("")
   const [currentQA, setCurrentQA] = useState<Array<{ question: string; answer: string }>>([])
   const [manualText, setManualText] = useState("")
-  const [isProcessingText, setIsProcessingText] = useState(false)
- 
 
+  useEffect(() => {
+    const fetchNotes = async () => {
+      try {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/notes`)
+        const data = await res.json()
+
+        const mappedNotes = data.map((n: any) => ({
+          ...n,
+          id: n._id || n.id || Date.now().toString()
+        }))
+
+        onSetNotes(mappedNotes)
+      } catch (error) {
+        console.error("Failed to load notes from MongoDB", error)
+      }
+    }
+
+    fetchNotes()
+  }, [onSetNotes])
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
-    if (!file || file.type !== "application/pdf") {
-      alert("Please select a PDF file")
-      return
-    }
+    if (!file || file.type !== "application/pdf") return alert("Please upload a PDF")
 
     setIsUploading(true)
     setIsSummarizing(true)
@@ -44,104 +57,54 @@ export function MainContent({ activeNote,onSetActiveNote, onAddNote }: MainConte
       const formData = new FormData()
       formData.append("pdf", file)
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/upload-pdf`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/upload-pdf`, {
         method: "POST",
-        body: formData,
+        body: formData
       })
 
-      if (!response.ok) {
-        throw new Error("Failed to analyze PDF")
-      }
-
-      const result = await response.json()
+      const result = await res.json()
 
       const newNote: Note = {
-        id: Date.now().toString(),
+        id: "", // let backend generate ID; HomePage will map it later
         title: file.name.replace(".pdf", ""),
         summary: result.summary,
         content: result.content,
         questions: [],
-        createdAt: new Date().toISOString(),
+        createdAt: new Date().toISOString()
       }
 
       setCurrentSummary(result.summary)
       setCurrentQA([])
-      onAddNote(newNote)
+      onAddNote(newNote) // ✅ this will post to backend
     } catch (error) {
       console.error("Error analyzing PDF:", error)
-      alert("Failed to analyze PDF. Please try again.")
     } finally {
       setIsUploading(false)
       setIsSummarizing(false)
     }
   }
 
-  const handleAskQuestion = async () => {
-    if (!question.trim() || !activeNote) return
-
-    setIsAnswering(true)
-
-    try {
-      const response = await fetch("/api/ask-question", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          question,
-          content: activeNote.content,
-        }),
-      })
-
-      if (!response.ok) {
-        throw new Error("Failed to get answer")
-      }
-
-      const result = await response.json()
-      const newQA = { question, answer: result.answer }
-
-      setCurrentQA((prev) => [...prev, newQA])
-      setQuestion("")
-    } catch (error) {
-      console.error("Error asking question:", error)
-      alert("Failed to get answer. Please try again.")
-    } finally {
-      setIsAnswering(false)
-    }
-  }
-
   const handleTextSummarization = async () => {
-    if (!manualText.trim()) {
-      alert("Please enter some text to summarize")
-      return
-    }
+    if (!manualText.trim()) return
 
     setIsProcessingText(true)
 
     try {
-      const response = await fetch("/api/analyze-text", {
+      const res = await fetch("/api/analyze-text", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          text: manualText,
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: manualText })
       })
 
-      if (!response.ok) {
-        throw new Error("Failed to analyze text")
-      }
-
-      const result = await response.json()
+      const result = await res.json()
 
       const newNote: Note = {
-        id: Date.now().toString(),
+        id: "", // let HomePage assign _id to id
         title: result.title || "Manual Note",
         summary: result.summary,
         content: manualText,
         questions: [],
-        createdAt: new Date().toISOString(),
+        createdAt: new Date().toISOString()
       }
 
       setCurrentSummary(result.summary)
@@ -149,16 +112,37 @@ export function MainContent({ activeNote,onSetActiveNote, onAddNote }: MainConte
       setManualText("")
       onAddNote(newNote)
     } catch (error) {
-      console.error("Error analyzing text:", error)
-      alert("Failed to analyze text. Please try again.")
+      console.error("Text summarization failed", error)
     } finally {
       setIsProcessingText(false)
     }
   }
 
+  const handleAskQuestion = async () => {
+    if (!question.trim() || !activeNote) return
+
+    setIsAnswering(true)
+    try {
+      const res = await fetch("/api/ask-question", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question, content: activeNote.content })
+      })
+
+      const result = await res.json()
+      const newQA = { question, answer: result.answer }
+      setCurrentQA((prev) => [...prev, newQA])
+      setQuestion("")
+    } catch (error) {
+      console.error("Question answering failed:", error)
+    } finally {
+      setIsAnswering(false)
+    }
+  }
+
   return (
     <main className="flex-1 flex flex-col bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
-      <header className="border-b bg-white/80 backdrop-blur-sm p-4 flex items-center gap-4 shadow-sm">
+   <header className="border-b bg-white/80 backdrop-blur-sm p-4 flex items-center gap-4 shadow-sm">
         <SidebarTrigger />
         <h2 className="text-xl font-semibold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
           {activeNote ? activeNote.title : "AI Note Taking"}
@@ -215,32 +199,30 @@ export function MainContent({ activeNote,onSetActiveNote, onAddNote }: MainConte
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="space-y-4">
-                  <textarea
-                    placeholder="Write your notes, thoughts, or any content you'd like to summarize..."
-                    value={manualText}
-                    onChange={(e) => setManualText(e.target.value)}
-                    disabled={isProcessingText}
-                    className="w-full h-40 p-4 rounded-lg border-0 bg-white/10 backdrop-blur-sm text-white placeholder-white/70 resize-none focus:ring-2 focus:ring-white/50 focus:outline-none"
-                  />
-                  <Button
-                    onClick={handleTextSummarization}
-                    disabled={!manualText.trim() || isProcessingText}
-                    className="w-full bg-white text-emerald-600 hover:bg-white/90 font-semibold py-3"
-                  >
-                    {isProcessingText ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Processing Notes...
-                      </>
-                    ) : (
-                      <>
-                        <FileText className="h-4 w-4 mr-2" />
-                        Summarize Notes
-                      </>
-                    )}
-                  </Button>
-                </div>
+                <textarea
+                  placeholder="Write your notes, thoughts, or any content you'd like to summarize..."
+                  value={manualText}
+                  onChange={(e) => setManualText(e.target.value)}
+                  disabled={isProcessingText}
+                  className="w-full h-40 p-4 rounded-lg border-0 bg-white/10 backdrop-blur-sm text-white placeholder-white/70 resize-none focus:ring-2 focus:ring-white/50 focus:outline-none"
+                />
+                <Button
+                  onClick={handleTextSummarization}
+                  disabled={!manualText.trim() || isProcessingText}
+                  className="w-full bg-white text-emerald-600 hover:bg-white/90 font-semibold py-3"
+                >
+                  {isProcessingText ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Processing Notes...
+                    </>
+                  ) : (
+                    <>
+                      <FileText className="h-4 w-4 mr-2" />
+                      Summarize Notes
+                    </>
+                  )}
+                </Button>
               </CardContent>
             </Card>
           </div>
@@ -255,25 +237,55 @@ export function MainContent({ activeNote,onSetActiveNote, onAddNote }: MainConte
                 </CardTitle>
               </CardHeader>
               <CardContent>
-               <div className="text-white/95 leading-relaxed space-y-4">
-  {(activeNote.summary || currentSummary)
-    .split("\n\n")
-    .map((para, idx) => {
-      // If the line starts with a number and a dot, treat as heading
-      const isHeading = /^\d+\.\s/.test(para.trim());
-      if (isHeading) {
-        const [heading, ...rest] = para.trim().split("\n");
-        return (
-          <div key={idx}>
-            <p className="font-bold underline text-lg mb-1">{heading}</p>
-            {rest.length > 0 && <p>{rest.join("\n")}</p>}
-          </div>
-        );
-      }
-      return <p key={idx}>{para}</p>;
-    })}
-</div>
+                <div className="text-white/95 leading-relaxed space-y-4">
+                  {(activeNote.summary || currentSummary)
+                    .split("\n\n")
+                    .map((para, idx) => {
+                      const isHeading = /^\d+\.\s/.test(para.trim())
+                      if (isHeading) {
+                        const [heading, ...rest] = para.trim().split("\n")
+                        return (
+                          <div key={idx}>
+                            <p className="font-bold underline text-lg mb-1">{heading}</p>
+                            {rest.length > 0 && <p>{rest.join("\n")}</p>}
+                          </div>
+                        )
+                      }
+                      return <p key={idx}>{para}</p>
+                    })}
+         
+<Button
+  className="mt-2"
+  onClick={async () => {
+    try {
+      const res = await fetch("/api/tts", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ text: activeNote?.summary || "No summary available to read" }),
+      })
 
+      if (!res.ok) {
+        alert("Failed to generate audio")
+        return
+      }
+
+      const arrayBuffer = await res.arrayBuffer()
+      const blob = new Blob([arrayBuffer], { type: "audio/mpeg" })
+      const url = URL.createObjectURL(blob)
+
+      const audio = new Audio(url)
+      audio.play()
+    } catch (err) {
+      console.error("TTS Playback Error", err)
+    }
+  }}
+>
+  🔊 Listen to Summary
+</Button>
+
+                </div>
               </CardContent>
             </Card>
 
@@ -291,7 +303,7 @@ export function MainContent({ activeNote,onSetActiveNote, onAddNote }: MainConte
                     placeholder="Ask a question about the document..."
                     value={question}
                     onChange={(e) => setQuestion(e.target.value)}
-                    onKeyPress={(e) => e.key === "Enter" && handleAskQuestion()}
+                    onKeyDown={(e) => e.key === "Enter" && handleAskQuestion()}
                     disabled={isAnswering}
                     className="bg-white/10 backdrop-blur-sm border-white/30 text-white placeholder-white/70 focus:ring-white/50"
                   />
@@ -312,10 +324,7 @@ export function MainContent({ activeNote,onSetActiveNote, onAddNote }: MainConte
                         <p className="text-sm font-medium text-white/95">Q: {qa.question}</p>
                       </div>
                       <div className="bg-white/20 backdrop-blur-sm p-3 rounded-lg">
-                       <div className="bg-white/20 backdrop-blur-sm p-3 rounded-lg">
-  <p className="text-sm text-white/95 whitespace-pre-line">A: {qa.answer}</p>
-</div>
-
+                        <p className="text-sm text-white/95 whitespace-pre-line">A: {qa.answer}</p>
                       </div>
                     </div>
                   ))}
@@ -325,7 +334,7 @@ export function MainContent({ activeNote,onSetActiveNote, onAddNote }: MainConte
           </div>
         )}
 
-        {/* Upload new document button when viewing a note */}
+        {/* Footer Buttons */}
         {activeNote && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl mx-auto">
             <Card className="border-0 shadow-lg bg-gradient-to-r from-violet-500 to-purple-600">
@@ -365,20 +374,18 @@ export function MainContent({ activeNote,onSetActiveNote, onAddNote }: MainConte
 
             <Card className="border-0 shadow-lg bg-gradient-to-r from-rose-500 to-pink-600">
               <CardContent className="pt-6">
-               <Button
-  onClick={() => {
-    setManualText("")
-    setCurrentSummary("")
-    setCurrentQA([])
-
-    onSetActiveNote(null)  // This shows the manual input section again
-  }}
-  className="w-full bg-white text-rose-600 hover:bg-white/90 font-semibold"
->
-  <MessageSquare className="h-4 w-4 mr-2" />
-  Create New Manual Note
-</Button>
-
+                <Button
+                  onClick={() => {
+                    setManualText("")
+                    setCurrentSummary("")
+                    setCurrentQA([])
+                    onSetActiveNote(null)
+                  }}
+                  className="w-full bg-white text-rose-600 hover:bg-white/90 font-semibold"
+                >
+                  <MessageSquare className="h-4 w-4 mr-2" />
+                  Create New Manual Note
+                </Button>
               </CardContent>
             </Card>
           </div>
