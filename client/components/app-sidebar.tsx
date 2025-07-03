@@ -13,6 +13,8 @@ import {
   X,
   Home,
   User,
+  MoreVertical,
+  Pencil,
 } from "lucide-react"
 import {
   Sidebar,
@@ -28,6 +30,8 @@ import {
   SidebarFooter,
 } from "@/components/ui/sidebar"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu"
+import { EditNoteModal } from "@/components/edit-note-modal"
 import type { Note } from "@/types/note"
 
 interface AppSidebarProps {
@@ -87,6 +91,8 @@ export function AppSidebar({
   onViewChange,
 }: AppSidebarProps) {
   const [searchQuery, setSearchQuery] = useState("")
+  const [editNote, setEditNote] = useState<Note | null>(null)
+  const [showEditModal, setShowEditModal] = useState(false)
 
   const filteredNotes = notes.filter((note) => {
     if (!searchQuery.trim()) return true
@@ -111,6 +117,25 @@ export function AppSidebar({
     }
   }
 
+ const handleSaveUpdatedNote = (updated: Note) => {
+  // ✅ Update the note in your database and in UI
+  fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/notes/${updated.id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(updated),
+  })
+    .then((res) => {
+      if (!res.ok) throw new Error("Failed to update note")
+      onSelectNote(updated)
+      setShowEditModal(false)
+    })
+    .catch((err) => {
+      console.error("Update error:", err)
+      alert("Failed to update note")
+    })
+}
+
+
   return (
     <Sidebar className="border-r-0 bg-gradient-to-b from-slate-50 to-gray-100 shadow-xl">
       <SidebarHeader className="p-6 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 text-white">
@@ -126,7 +151,6 @@ export function AppSidebar({
       </SidebarHeader>
 
       <SidebarContent className="px-4 py-6">
-        {/* Navigation Menu */}
         <SidebarGroup>
           <SidebarGroupLabel className="text-gray-600 font-semibold mb-3">Navigation</SidebarGroupLabel>
           <SidebarGroupContent>
@@ -154,7 +178,6 @@ export function AppSidebar({
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* Notes Section - Only show when in notes view */}
         {currentView === "notes" && (
           <SidebarGroup className="mt-6">
             <SidebarGroupLabel className="flex items-center justify-between text-indigo-700 font-semibold mb-3">
@@ -167,7 +190,6 @@ export function AppSidebar({
             </SidebarGroupLabel>
 
             <SidebarGroupContent>
-              {/* Search Bar */}
               <div className="mb-4">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -218,12 +240,24 @@ export function AppSidebar({
                           </div>
                         </div>
                       </SidebarMenuButton>
-                      <SidebarMenuAction
-                        onClick={() => handleDelete(note.id)}
-                        className="text-red-500 hover:text-red-600 hover:bg-red-50"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </SidebarMenuAction>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <SidebarMenuAction className="hover:bg-gray-100">
+                            <MoreVertical className="h-4 w-4 text-gray-500" />
+                          </SidebarMenuAction>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" side="right">
+                          <DropdownMenuItem onClick={() => {
+                            setEditNote(note)
+                            setShowEditModal(true)
+                          }}>
+                            <Pencil className="h-4 w-4 mr-2" /> Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleDelete(note.id)}>
+                            <Trash2 className="h-4 w-4 mr-2 text-red-500" /> Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </SidebarMenuItem>
                   ))
                 )}
@@ -247,6 +281,13 @@ export function AppSidebar({
           </div>
         </div>
       </SidebarFooter>
+
+      <EditNoteModal
+        open={showEditModal}
+        note={editNote}
+        onClose={() => setShowEditModal(false)}
+        onSave={handleSaveUpdatedNote}
+      />
     </Sidebar>
   )
 }
