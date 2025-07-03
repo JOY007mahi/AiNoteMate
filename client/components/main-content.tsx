@@ -174,7 +174,7 @@ export function MainContent({ activeNote, onAddNote, onSetActiveNote, onSetNotes
               <CardHeader className="text-center relative z-10 bg-gradient-to-r from-indigo-600 to-purple-600 text-white">
                 <CardTitle className="flex items-center justify-center gap-3 text-3xl font-bold animate-fade-in">
                   <Upload className="h-8 w-8 animate-bounce" />
-                  Upload PDF Document
+                Summarize PDF with AI
                   <Sparkles className="h-6 w-6 animate-pulse text-yellow-300" />
                 </CardTitle>
               </CardHeader>
@@ -223,7 +223,7 @@ export function MainContent({ activeNote, onAddNote, onSetActiveNote, onSetNotes
               <CardHeader className="text-center relative z-10 bg-gradient-to-r from-emerald-600 to-teal-600 text-white">
                 <CardTitle className="flex items-center justify-center gap-3 text-3xl font-bold animate-fade-in">
                   <MessageSquare className="h-8 w-8 animate-pulse" />
-                  Enter Note Manually
+                 Write Note for AI Summary
                   <Sparkles className="h-6 w-6 animate-spin text-yellow-300" />
                 </CardTitle>
               </CardHeader>

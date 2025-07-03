@@ -276,7 +276,7 @@ export function StudyVault({ onNavigateBack }: StudyVaultProps) {
         {/* Study Materials List */}
         <div className="mb-6">
           <h2 className="text-xl font-semibold text-gray-800 mb-4">
-            Your Materials ({filteredMaterials.length})
+            Your Study Materials ({filteredMaterials.length})
           </h2>
 
           {filteredMaterials.length === 0 ? (
