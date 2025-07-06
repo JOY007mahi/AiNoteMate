@@ -1,7 +1,22 @@
 "use client"
 
+import { useProfile } from "@/hooks/useProfile"
+import { useRouter } from "next/navigation"
+import { useSidebar } from "@/components/ui/sidebar" // ✅ Sidebar toggle hook
+
 import { useState } from "react"
-import { Search, Moon, Sun, Bell, Settings, User, LogOut, Crown } from "lucide-react"
+import {
+  Search,
+  Moon,
+  Sun,
+  Bell,
+  Settings,
+  User,
+  LogOut,
+  Crown,
+  Menu,
+} from "lucide-react"
+
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -32,13 +47,32 @@ const viewTitles = {
   settings: "⚙️ Settings",
 }
 
-export function TopHeader({ currentView, darkMode, onToggleDarkMode, searchQuery, onSearchChange }: TopHeaderProps) {
+export function TopHeader({
+  currentView,
+  darkMode,
+  onToggleDarkMode,
+  searchQuery,
+  onSearchChange,
+}: TopHeaderProps) {
   const [notifications] = useState(3)
+  const email = "alex.student@university.edu"
+  const profile = useProfile(email)
+  const router = useRouter()
+  const { toggleSidebar } = useSidebar() // ✅ Sidebar toggle function
 
   return (
     <header className="h-16 bg-white/80 backdrop-blur-xl border-b border-gray-200 flex items-center justify-between px-6 sticky top-0 z-50 shadow-sm">
-      {/* Left Section - Title */}
+      {/* Left Section - Sidebar Toggle & Title */}
       <div className="flex items-center gap-4">
+        {/* ✅ Sidebar Toggle Button */}
+        <button
+          onClick={toggleSidebar}
+          className="p-2 rounded-md hover:bg-gray-100 focus:outline-none transition"
+        >
+          <Menu className="w-5 h-5 text-gray-700" />
+        </button>
+
+        {/* View Title */}
         <h1 className="text-2xl font-bold bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
           {viewTitles[currentView as keyof typeof viewTitles] || "StudyMind AI"}
         </h1>
@@ -66,7 +100,11 @@ export function TopHeader({ currentView, darkMode, onToggleDarkMode, searchQuery
           onClick={onToggleDarkMode}
           className="relative p-2 hover:bg-gray-100 transition-colors duration-200"
         >
-          {darkMode ? <Sun className="h-5 w-5 text-amber-500" /> : <Moon className="h-5 w-5 text-indigo-600" />}
+          {darkMode ? (
+            <Sun className="h-5 w-5 text-amber-500" />
+          ) : (
+            <Moon className="h-5 w-5 text-indigo-600" />
+          )}
         </Button>
 
         {/* Notifications */}
@@ -87,9 +125,9 @@ export function TopHeader({ currentView, darkMode, onToggleDarkMode, searchQuery
               className="relative h-10 w-10 rounded-full hover:ring-2 hover:ring-indigo-200 transition-all duration-200"
             >
               <Avatar className="h-10 w-10">
-                <AvatarImage src="/placeholder.svg?height=40&width=40" alt="Profile" />
+                <AvatarImage src={profile?.avatarUrl || "/placeholder.svg"} alt="Profile" />
                 <AvatarFallback className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white">
-                  <User className="h-5 w-5" />
+                  {profile?.name?.[0] || <User className="h-5 w-5" />}
                 </AvatarFallback>
               </Avatar>
             </Button>
@@ -98,16 +136,18 @@ export function TopHeader({ currentView, darkMode, onToggleDarkMode, searchQuery
             <DropdownMenuLabel className="font-normal">
               <div className="flex flex-col space-y-2">
                 <div className="flex items-center gap-2">
-                  <p className="text-sm font-medium leading-none">Alex Student</p>
-                  <Badge
-                    variant="secondary"
-                    className="text-xs bg-gradient-to-r from-amber-100 to-yellow-100 text-amber-700 border-amber-200"
-                  >
-                    <Crown className="h-3 w-3 mr-1" />
-                    Free
-                  </Badge>
+                  <p className="text-sm font-medium leading-none">{profile?.name || "Loading..."}</p>
+                  {profile?.plan && (
+                    <Badge
+                      variant="secondary"
+                      className="text-xs bg-gradient-to-r from-amber-100 to-yellow-100 text-amber-700 border-amber-200"
+                    >
+                      <Crown className="h-3 w-3 mr-1" />
+                      {profile.plan}
+                    </Badge>
+                  )}
                 </div>
-                <p className="text-xs leading-none text-muted-foreground">alex.student@university.edu</p>
+                <p className="text-xs leading-none text-muted-foreground">{profile?.email}</p>
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <div className="flex-1 bg-gray-200 rounded-full h-1.5">
                     <div className="bg-gradient-to-r from-indigo-500 to-purple-500 h-1.5 rounded-full w-3/4"></div>
@@ -117,11 +157,17 @@ export function TopHeader({ currentView, darkMode, onToggleDarkMode, searchQuery
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="cursor-pointer hover:bg-indigo-50">
+            <DropdownMenuItem
+              className="cursor-pointer hover:bg-indigo-50"
+              onClick={() => router.push("/settings?section=profile")}
+            >
               <User className="mr-2 h-4 w-4" />
               <span>Profile</span>
             </DropdownMenuItem>
-            <DropdownMenuItem className="cursor-pointer hover:bg-indigo-50">
+            <DropdownMenuItem
+              className="cursor-pointer hover:bg-indigo-50"
+              onClick={() => router.push("/settings?section=settings")}
+            >
               <Settings className="mr-2 h-4 w-4" />
               <span>Settings</span>
             </DropdownMenuItem>

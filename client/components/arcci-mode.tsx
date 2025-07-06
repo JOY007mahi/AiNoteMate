@@ -60,34 +60,29 @@ export function ArcCIMode() {
 
     setIsProcessing(true)
 
-    // Simulate AI processing
-    await new Promise((resolve) => setTimeout(resolve, 2000))
+    try {
+      const res = await fetch("/api/arcci", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: currentMode, input: userInput }),
+      })
 
-    const newResponse = {
-      type: currentMode,
-      content: generateMockResponse(currentMode, userInput),
-      timestamp: new Date(),
+      const data = await res.json()
+
+      const newResponse = {
+        type: currentMode,
+        content: data.reply,
+        timestamp: new Date(),
+      }
+
+      setResponses((prev) => [...prev, newResponse])
+      setUserInput("")
+    } catch (err) {
+      console.error("AI processing failed", err)
+      alert("Something went wrong while processing your input.")
     }
 
-    setResponses((prev) => [...prev, newResponse])
-    setUserInput("")
     setIsProcessing(false)
-  }
-
-  const generateMockResponse = (mode: string, input: string) => {
-    switch (mode) {
-      case "concept":
-        return `🧠 **Reverse Engineering "${input}"**\n\n**Step 3 (Final):** ${input}\n**Step 2 (Intermediate):** This concept builds upon fundamental principles of...\n**Step 1 (Foundation):** The core building blocks are...\n\n💡 **Key Insight:** Understanding flows from simple → complex, but learning can be more effective when we start with the end goal and trace backwards.`
-
-      case "question":
-        return `❓ **Questions Generated from "${input}"**\n\n1. What underlying assumptions does this answer make?\n2. How would you explain this to someone with no background?\n3. What are the practical applications of this concept?\n4. What would happen if we changed one key variable?\n5. How does this connect to other concepts you know?\n\n🎯 **Learning Focus:** These questions help you think critically about the material rather than just memorizing answers.`
-
-      case "explanation":
-        return `🔍 **Deconstructing "${input}"**\n\n**Complex Layer:** ${input}\n**Simplified Layer:** Breaking this down into digestible parts...\n**Core Components:** The essential elements are...\n**Visual Analogy:** Think of this like...\n\n✨ **Reconstruction:** Now you can build this concept back up from its components with deeper understanding.`
-
-      default:
-        return "Processing your input..."
-    }
   }
 
   return (
@@ -201,8 +196,8 @@ export function ArcCIMode() {
                       currentMode === "concept"
                         ? "e.g., 'Machine learning algorithms can predict human behavior'"
                         : currentMode === "question"
-                          ? "e.g., 'Photosynthesis converts sunlight into chemical energy'"
-                          : "e.g., 'Quantum entanglement occurs when particles become interconnected...'"
+                        ? "e.g., 'Photosynthesis converts sunlight into chemical energy'"
+                        : "e.g., 'Quantum entanglement occurs when particles become interconnected...'"
                     }
                     value={userInput}
                     onChange={(e) => setUserInput(e.target.value)}
