@@ -143,6 +143,45 @@ app.post('/ask', async (req, res) => {
   }
 });
 
+app.post('/upload-pdf', upload.single('file'), async (req, res) => {
+  try {
+    const file = req.file
+    if (!file) return res.status(400).json({ error: 'No file uploaded' })
+
+    const filePath = path.join(__dirname, 'uploads', file.filename)
+    const dataBuffer = fs.readFileSync(filePath)
+    const data = await pdfParse(dataBuffer)
+    const extractedText = data.text
+
+    fs.unlinkSync(filePath) // delete after parsing
+
+    const summaryResponse = await axios.post(
+      'https://openrouter.ai/api/v1/chat/completions',
+      {
+        model: 'mistralai/mistral-7b-instruct',
+        messages: [
+          {
+            role: 'user',
+            content: `Summarize the following PDF content clearly in plain text:\n\n${extractedText}`,
+          },
+        ],
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    )
+
+    const summary = summaryResponse.data.choices[0].message.content
+
+    return res.status(200).json({ summary }) // ✅ only summary
+  } catch (err) {
+    console.error("❌ /upload-pdf error:", err)
+    return res.status(500).json({ error: 'Failed to summarize PDF' })
+  }
+})
 
 // ---------- Upload Study Material ----------
 app.post('/upload-study-material', upload.single('file'), async (req, res) => {

@@ -30,43 +30,46 @@ export function MainContent({ activeNote, onAddNote, onSetActiveNote, onSetNotes
   const [generatedQuestions, setGeneratedQuestions] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file || file.type !== "application/pdf") return alert("Please upload a PDF")
+ const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const file = event.target.files?.[0]
+  if (!file || file.type !== "application/pdf") return alert("Please upload a PDF")
 
-    setIsUploading(true)
-    setIsSummarizing(true)
+  setIsUploading(true)
+  setIsSummarizing(true)
 
-    try {
-      const formData = new FormData()
-      formData.append("pdf", file)
+  try {
+    const formData = new FormData()
+    formData.append("file", file) // ✅ corrected field name
 
-      const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/upload-pdf`, {
-        method: "POST",
-        body: formData,
-      })
+    const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/upload-pdf`, {
+      method: "POST",
+      body: formData,
+    })
 
-      const result = await res.json()
+    const result = await res.json()
 
-      const newNote: Note = {
-        id: "",
-        title: file.name.replace(".pdf", ""),
-        summary: result.summary,
-        content: result.content,
-        questions: [],
-        createdAt: new Date().toISOString(),
-      }
+    if (!res.ok) throw new Error(result.error || "Failed to summarize PDF")
 
-      setCurrentSummary(result.summary)
-      setCurrentQA([])
-      onAddNote(newNote)
-    } catch (error) {
-      console.error("Error analyzing PDF:", error)
-    } finally {
-      setIsUploading(false)
-      setIsSummarizing(false)
+    const newNote: Note = {
+      id: "",
+      title: file.name.replace(".pdf", ""),
+      summary: result.summary,
+      content: "", // optional: leave blank since we didn’t return raw content
+      questions: [],
+      createdAt: new Date().toISOString(),
     }
+
+    setCurrentSummary(result.summary)
+    setCurrentQA([])
+    onAddNote(newNote)
+  } catch (error) {
+    console.error("Error analyzing PDF:", error)
+    alert("Failed to process the PDF. Try again later.")
+  } finally {
+    setIsUploading(false)
+    setIsSummarizing(false)
   }
+}
 
   const handleAskQuestion = async () => {
     if (!question.trim() || !activeNote) return
