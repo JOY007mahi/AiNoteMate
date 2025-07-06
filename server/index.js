@@ -12,11 +12,19 @@ const path = require('path');
 const connectDB = require('./db');
 const Note = require('./models/note');
 const StudyMaterial = require('./models/studymaterial');
+const Profile = require('./models/Profile');
 
 const app = express();
 
+connectDB();
+
+const uploadsDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir);
+}
+
 const storage = multer.diskStorage({
-  destination: './uploads',
+  destination: uploadsDir,
   filename: (req, file, cb) => {
     const uniqueName = Date.now() + '-' + file.originalname;
     cb(null, uniqueName);
@@ -28,13 +36,10 @@ app.use(cors());
 app.use(express.json());
 app.use('/uploads', express.static('uploads'));
 
-connectDB();
+const profileRoutes = require('./routes/profile')
+app.use('/api', profileRoutes)
 
-const uploadsDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir);
-}
-
+// ---------- Notes ----------
 app.get('/notes', async (req, res) => {
   try {
     const notes = await Note.find().sort({ createdAt: -1 });
@@ -63,6 +68,8 @@ app.delete('/notes/:id', async (req, res) => {
   }
 });
 
+
+// ---------- AI Summarize & Ask ----------
 app.post('/summarize', async (req, res) => {
   const { notes } = req.body;
   try {
@@ -113,7 +120,7 @@ app.post('/ask', async (req, res) => {
           {
             role: 'system',
             content:
-              "You are a helpful and smart AI assistant. When a question is asked based on the notes, respond in a readable and structured format. If it's a 'list-based' question (e.g. 'What are the main topics?'), return bulleted or numbered points, each on its own line. If it's a conceptual question, return a concise and well-structured paragraph. Do not remove or merge topic headings. Preserve proper spacing.",
+              "You are a helpful and smart AI assistant. When a question is asked based on the notes, respond in a readable and structured format. If it's a 'list-based' question, return bulleted/numbered points. If conceptual, return a concise paragraph.",
           },
           {
             role: 'user',
@@ -136,6 +143,8 @@ app.post('/ask', async (req, res) => {
   }
 });
 
+
+// ---------- Upload Study Material ----------
 app.post('/upload-study-material', upload.single('file'), async (req, res) => {
   try {
     const file = req.file;
@@ -166,7 +175,7 @@ app.post('/upload-study-material', upload.single('file'), async (req, res) => {
         messages: [
           {
             role: 'user',
-            content: `Summarize the following content with good formatting and clarity:\n\n${extractedText}`,
+            content: `Summarize the following content:\n\n${extractedText}`,
           },
         ],
       },
@@ -187,7 +196,7 @@ app.post('/upload-study-material', upload.single('file'), async (req, res) => {
         messages: [
           {
             role: 'user',
-            content: `Based on the following content, suggest a short and meaningful title (one phrase or 2-3 words) that best represents the main topic. Don't include quotation marks or numbers.\n\n${extractedText}`,
+            content: `Suggest a short, meaningful title for the content:\n\n${extractedText}`,
           },
         ],
       },
@@ -201,12 +210,12 @@ app.post('/upload-study-material', upload.single('file'), async (req, res) => {
 
     const smartTitle = titleResponse.data.choices[0].message.content.trim();
 
-       const fileUrl = `${req.protocol}://${req.get('host')}/uploads/${file.filename}`;
+    const fileUrl = `${req.protocol}://${req.get('host')}/uploads/${file.filename}`;
 
     const newMaterial = new StudyMaterial({
       title: smartTitle,
       originalFilename: file.originalname,
-      filename: smartTitle || file.originalname, // optional, keep if you use it on frontend
+      filename: smartTitle || file.originalname,
       fileType,
       fileUrl,
       summary,
@@ -217,10 +226,9 @@ app.post('/upload-study-material', upload.single('file'), async (req, res) => {
 
     res.status(201).json(newMaterial);
   } catch (err) {
-  console.error("❌ Upload error:", err); // <== add this line
-  res.status(500).json({ error: 'Failed to process file' });
-}
-
+    console.error("❌ Upload error:", err);
+    res.status(500).json({ error: 'Failed to process file' });
+  }
 });
 
 app.get('/study-materials', async (req, res) => {
@@ -229,6 +237,28 @@ app.get('/study-materials', async (req, res) => {
     res.json(materials);
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch study materials' });
+  }
+});
+
+app.delete("/study-materials/:id", async (req, res) => {
+  try {
+    const material = await StudyMaterial.findByIdAndDelete(req.params.id);
+    if (!material) return res.status(404).send("Material not found");
+
+    if (material.fileUrl) {
+      const filename = path.basename(material.fileUrl);
+      const filePath = path.join(__dirname, "uploads", filename);
+
+      if (fs.existsSync(filePath) && fs.lstatSync(filePath).isFile()) {
+        fs.unlinkSync(filePath);
+        console.log("✅ Deleted:", filePath);
+      }
+    }
+
+    res.status(200).json({ message: "Material deleted" });
+  } catch (err) {
+    console.error("❌ Failed to delete study material:", err);
+    res.status(500).send("Failed to delete material");
   }
 });
 
@@ -242,31 +272,45 @@ app.get('/download/:filename', (req, res) => {
 });
 
 
-app.delete("/study-materials/:id", async (req, res) => {
+// ---------- Profile Update (NEW) ----------
+app.post('/api/profile/update', upload.single('avatar'), async (req, res) => {
   try {
-    const material = await StudyMaterial.findByIdAndDelete(req.params.id);
-    if (!material) return res.status(404).send("Material not found");
+    const { name, email, university, major } = req.body;
+    const avatarUrl = req.file
+      ? `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`
+      : undefined;
 
-    if (material.fileUrl) {
-      const filename = path.basename(material.fileUrl); // Get just the file name safely
-      const filePath = path.join(__dirname, "uploads", filename);
+    let profile = await Profile.findOne({ email });
 
-      // Make sure it's a file, and not the whole uploads directory
-      if (fs.existsSync(filePath) && fs.lstatSync(filePath).isFile()) {
-        fs.unlinkSync(filePath); // Delete the file
-        console.log("✅ Deleted:", filePath);
-      } else {
-        console.warn("⚠️ File does not exist or is not a regular file:", filePath);
-      }
+    if (!profile) {
+      profile = new Profile({ name, email, university, major, avatarUrl });
+    } else {
+      profile.name = name;
+      profile.university = university;
+      profile.major = major;
+      if (avatarUrl) profile.avatarUrl = avatarUrl;
     }
 
-    res.status(200).json({ message: "Material deleted" });
+    await profile.save();
+    res.json({ message: "Profile saved", profile });
   } catch (err) {
-    console.error("❌ Failed to delete study material:", err);
-    res.status(500).send("Failed to delete material");
+    console.error("❌ Profile update failed:", err);
+    res.status(500).json({ error: "Failed to update profile" });
   }
 });
 
+// GET profile by email
+// GET /api/profile/:email
+app.get('/api/profile/:email', async (req, res) => {
+  try {
+    const profile = await Profile.findOne({ email: req.params.email });
+    if (!profile) return res.status(404).json({ message: "Profile not found" });
+    res.json(profile);
+  } catch (err) {
+    console.error("❌ Failed to fetch profile:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
 
-
+// ---------- Start Server ----------
 app.listen(5000, () => console.log('✅ Server running on port 5000'));
