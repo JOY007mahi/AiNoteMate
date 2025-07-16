@@ -19,11 +19,11 @@
 
 | Component  | URL                                                        |
 |------------|------------------------------------------------------------|
-| Frontend   | [https://ai-notemate.vercel.app]|
+| Frontend   | [https://ainotemate.vercel.app](https://ainotemate.vercel.app) |
 | Backend API| Render |
 
 ---
-
+ 
 ⚙️ Tech Stack
 
  Frontend
